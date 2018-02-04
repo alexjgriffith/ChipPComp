@@ -1,0 +1,12 @@
+..Rcheck/
+.Rproj.user
+.Rhistory
+*.RData
+*.o
+*.so
+*#
+#*
+/inst/deps
+/inst/data
+*~
+inst/doc
