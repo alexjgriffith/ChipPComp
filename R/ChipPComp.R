@@ -105,19 +105,24 @@ MACS XLS output")
     if(! format %in% c("xls") ){
         stop("format options are (xls)")
     }
-    loadBedFun<-switch(format,
-                       xls=function(a,b=a){readPeaksXLS(a,b,pvalue)}
-                       #,bed=readPeaksBed
-                       )
+    ## loadBedFun<-switch(format,
+    ##                    xls=function(a,b=a){readPeaksXLS(a,b,pvalue)},
+    ##                    bed=readPeaksBed
+    ##                    )
+    loadBedFun<-function(a,b=a) {readPeaksXLS(a,b,pvalue)}
     ## Load each of th files
     files<-lapply(._mapziplist(peakList,categories),
                   function(x) do.call(loadBedFun, as.list(x)))
     ## Unify the peaks based on width (default 700)
-    testBed<-._unifyBedFile(
+    ## Fix issue with readPeaksXLS
+    ## print(._mapziplist(peakList,categories)[[1]])
+    
+    testbed<-._unifyBedFile(
         ._sortDataFrame(
             do.call(rbind,Filter(function(x) ! is.null(x), files)),
             "chr","summit"),width)
     ## Make sure none of the peaks have values less than 0
+
     testBedSE<-._shiftFromZero(testBed$summit)
     ## Return a data frame of form <chr><start><end><h1>...<hn>
     width<-dim(testBed)[2]
@@ -233,9 +238,9 @@ makeUDM<-function(data,rawdata,n=0,verbose=NULL,clust=NULL){
             print(paste("# Raw data file ",file," was found.",sep=""))
     }
     peakLength<-length(data$chr)
-    chroms<-as.character(data$chr)
     ## Sort afs
-    data<-._orderBed(data)
+    data<-._orderBed(data)    
+    chroms<-as.character(data$chr)
     ## Parallell Implementation
     if(n>0){
         if(!requireNamespace("parallel"))
@@ -539,4 +544,30 @@ addFasta<-function(ccca,genome,width=200,...){
                          start = start,
                          width = width)
     ccca
+}
+
+#' unify bed file
+#'
+#' unify bed file
+._unifyBedFile<-function(dataset,overlapWidth, chr="chr",
+                         summit="summit",name="name"){
+    chrcats<-levels(dataset[chr,])
+    l<-nrow(dataset)
+    t1<-dataset[1:l-1,]
+    t2<-dataset[2:l,]
+    b<-(t1[,chr]==t2[,chr] & abs(as.numeric(t1[,summit])-
+                                 as.numeric(t2[,summit]))<overlapWidth)
+    prePeaks<-unlist(lapply(which(b==FALSE),function(x){c(x,x+1)}))
+    peaks<-t(matrix(c(1,prePeaks[1:length(prePeaks)-1]),nrow=2))
+    data<-._unityOutput(peaks,
+                        as.integer(dataset[,chr]),
+                        as.integer(dataset[,summit]),
+                        as.integer(dataset[,name]))
+    names(data)<-list(chr,summit,"matrix")
+    data[[chr]]<-as.factor(data[[chr]])
+    levels(data[[chr]])<-levels(dataset[,chr])
+    colnames(data$matrix)<-levels(dataset[,name])
+    od<-data.frame(chr=data[[chr]],summit=data[[summit]])
+    od<-cbind(od,data$matrix)
+    od
 }
