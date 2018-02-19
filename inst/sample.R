@@ -1,65 +1,36 @@
+## Base library
+library(ChipPComp)
+## To generate fasta subsets for motif analysis
+library(BSgenome.Hsapiens.UCSC.hg19)
 
-
-tal1_hg_cd34_no_mock_peaks.xls
-
+## Replace this root to wherever the ChipPCompData libary is stored
 root <- "/Users/agriffith/masters/r-workspace/ChipPCompData/inst/extdata/"
-
-bedFiles <- sapply(c("cd34","cem","erythroid","jurkat"),function(cellType){paste0(root,"tal1_hg_", cellType, "_aligned.bed")})
-
-peakFiles <- sapply(c("cd34", "cem_1","erythroid","jurkat"),function(cellType){paste0(root,"tal1_hg_", cellType, "_no_mock_peaks.xls")})
-
+peakList <- sapply(c("cd34", "cem_1","erythroid","jurkat"),
+                   function(cellType){paste0(root,"tal1_hg_", cellType, "_no_mock_peaks.xls")})
+rawData <- sapply(c("cd34", "cem","erythroid","jurkat"),
+                  function(cellType){paste0(root,"tal1_hg_", cellType, "_aligned.bed")})
 categories <- c("cd34","cem_1","erythroid","jurkat")
-makeAFS(peakFiles,)
+ccca<-makeCCCA(rawData,peakList,categories,10)
 
+## visualize the principal components
+plotPCA(ccca)
 
-biocLite("Rsamtools")
+## Based on the visualized principal components select subsections
+nm<-normalizePRC(ccca$prc)
+## Name leukemia, where the normalized 1st pc is less than 1 sd of the mean
+ccca<-addRegion(ccca,"Leukemia",nm[,1]<(mean(nm[,1])-1*sd(nm[,1])))
+## Name Erythroid, where the normalized 1st pc is greater than 1 sd of the mean
+ccca<-addRegion(ccca,"Erythroid",nm[,1]>(mean(nm[,1])+1*sd(nm[,1])))
+## Name CD34, where the normalized 2nd pc is greater than 1 sd of the mean
+ccca<-addRegion(ccca,"CD34",nm[,2]>(mean(nm[,2])+1*sd(nm[,2])))
 
-library("Rsamtools")
-library("ShortRead")
+genome<-BSgenome.Hsapiens.UCSC.hg19
+ccca<-addFasta(ccca,genome)
 
-library (ShortRead)
-
-bamFile="/Users/agriffith/masters/r-workspace/ChipPCompData/inst/extdata/tal1_hg_cd34_aligned.bam"
-
-which <- IRangesList(seq1=IRanges(1000,2000))
-what <- c("rname", "strand", "pos", "qwidth","seq")
-index <- indexBam(file)
-
-
-param <- ScanBamParam(which=which, what=what)
-
-bam <- scanBam (bamfile,bf)
-
-bf <- BamFile(bamfile)
-
+## The bed files for CD34
+ccca$afs[ccca$reg[,"CD34"],c("chr","start","end")]
+## Output the basepairs for CD34
+ccca$fasta[ccca$reg[,"CD34"],]
 
 
 
-bf <- BamFile(bamfile)
-
-seqnames(seqinfo(bf))
-
-bf<-scanBam(bamFile,ScanBamParam(what=c('rname','pos', 'qwidth','strand','qname')))
-
-data.frame(char=bf$rname,start=bf$pos,end=bf$pos+bf$qwidth)
-
-loadChar<-function(char,bamFile){
-    param <- ScanBamParam(what=c('pos', 'qwidth'),                      
-                          which=GRanges(char, IRanges(1, 1e7)),
-                          flag=scanBamFlag(isUnmappedQuery=FALSE))
-    x <- scanBam(bamFile,  param=param)[[1]]
-    print(char)
-    str()
-    data.frame(char=char,start=x$pos,
-               end= x$pos+x$qwidth)
-}
-
-
-do.call(rbind,Filter(function(x){dim(x)==2},lapply(seqnames(seqinfo(bf)),loadChar,bamfile)))
-
-data.frame(char=bf[[1]]$rname,start=bf[[1]]$pos,end=bf[[1]]$pos+bf[[1]]$qwidth)
-
-
-lapply(seqnames(seqinfo(bf)),loadChar,bamfile)
-
-scanBamWhat()

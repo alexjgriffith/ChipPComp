@@ -1,3 +1,19 @@
+#' Compare multiple ChIP data sets across experimental conditions
+#'
+#' @docType package
+#' @name ChipPComp
+#' @author "Alexander Griffith <griffitaj@@gmail.com>"
+NULL
+
+#' @useDynLib ChipPComp, unityOutput, pileup
+#' @import parallel
+#' @import Biostrings
+#' @import graphics
+#' @importFrom stats var
+#' @importFrom utils read.table str write.table
+NULL
+
+
 #' Read Peaks XLS format
 #'
 #' Read in peaks that MACs has output in its XLS format. Works with MACS
@@ -67,6 +83,7 @@ readPeaksXLS<-function(file,name=file,pvalue=0){
         stop("Chromosomes and start length differ")
     start<-as.integer(as.character(bed$start))
     end<-as.integer(as.character(bed$end))
+    chroms<-as.character(chroms)
     peaknum<-as.integer(peakLength)
     score<-as.integer(rep(0,peakLength))
     results<-.C(pileup,file,chrom=chroms,start=start,end=end,
@@ -109,15 +126,16 @@ MACS XLS output")
     ##                    xls=function(a,b=a){readPeaksXLS(a,b,pvalue)},
     ##                    bed=readPeaksBed
     ##                    )
-    loadBedFun<-function(a,b=a) {readPeaksXLS(a,b,pvalue)}
+    ## Fix to include pvlaue
+    loadBedFun<-function(a,b=a) {
+        readPeaksXLS(a,b,ifelse(is.null(pvalue),0,pvalue))
+    }
     ## Load each of th files
     files<-lapply(._mapziplist(peakList,categories),
                   function(x) do.call(loadBedFun, as.list(x)))
     ## Unify the peaks based on width (default 700)
     ## Fix issue with readPeaksXLS
-    ## print(._mapziplist(peakList,categories)[[1]])
-    
-    testbed<-._unifyBedFile(
+    testBed<-._unifyBedFile(
         ._sortDataFrame(
             do.call(rbind,Filter(function(x) ! is.null(x), files)),
             "chr","summit"),width)
@@ -144,8 +162,6 @@ MACS XLS output")
 #' sampleAFS<-readAFS(filename)
 #' writeAFS(sampleAFS,"sample.afs")
 writeAFS<-function(data,fname){
-    if(class(data)!="AFS")
-        stop("must be of class \"AFS\"")
     frame<-as.data.frame(do.call(cbind,data))
     chrs<-data$chr
     frame[,1]<-chrs
@@ -186,7 +202,6 @@ writeAFS<-function(data,fname){
 #' sampleAFS<-readAFS(filename)
 readAFS<-function(fname){
     ret<-._orderBed(read.table(fname,header=TRUE))
-    attr(ret,"class")<-c("AFS","data.frame")
     ret
 }
 
@@ -207,7 +222,7 @@ readAFS<-function(fname){
 #'
 #' Generates a pile up matrix from a unified set of peaks and a list of
 #' raw data sets.
-#' @param data A preloaded bed data.frame which includes slots $chro
+#' @param peaks A preloaded bed data.frame which includes slots $chro
 #' $start $end
 #' @param rawdata a list of raw data files
 #' @param n the number of nodes to use. If 0 then the parrallel package
@@ -229,7 +244,7 @@ readAFS<-function(fname){
 #' ## sampleUDM<-makeUDM(sampleAFS,rawdata,n=1,clust=cl)
 #' ## stopCluster(cl)
 #' @export
-makeUDM<-function(data,rawdata,n=0,verbose=NULL,clust=NULL){
+makeUDM<-function(peaks,rawdata,n=0,verbose=NULL,clust=NULL){
     for(file in rawdata){
         if(! file.exists(file)){
             stop("Can't find file ",file,".")
@@ -237,9 +252,9 @@ makeUDM<-function(data,rawdata,n=0,verbose=NULL,clust=NULL){
         if(!is.null(verbose))
             print(paste("# Raw data file ",file," was found.",sep=""))
     }
-    peakLength<-length(data$chr)
+    peakLength<-length(peaks$chr)
     ## Sort afs
-    data<-._orderBed(data)    
+    data<-._orderBed(peaks)    
     chroms<-as.character(data$chr)
     ## Parallell Implementation
     if(n>0){
@@ -261,7 +276,6 @@ makeUDM<-function(data,rawdata,n=0,verbose=NULL,clust=NULL){
                                   chroms,peakLength)),
                     nrow=peakLength)
     }
-    attr(ret,"class")<-"UDM"
     ret
 }
 
@@ -291,7 +305,6 @@ writeUDM<-function(data,fname){
 #' sampleUDM<-readUDM(filename)
 readUDM<-function(fname){
     ret<-read.table(fname,header=TRUE)
-    attr(ret,"class")<-c("UDM","data.frame")
     ret
 }
 
@@ -345,7 +358,6 @@ makeCCCA<-function(dataSets,peakLists,categories,pvalue){
     prc<-makePRC(udm)
     ret<-list(afs=afs,udm=udm,prc=prc,fasta=NULL,reg=NULL,
               categories=categories)
-    attr(ret,"class")<-"ccca"
     ret
 }
 
@@ -368,7 +380,6 @@ loadCCCA<-function(peaks,heights,categories){
     prc<-makePRC(udm)
     ret<-list(afs=afs,udm=udm,prc=prc,fasta=NULL,reg=NULL,
               categories=categories)
-    attr(ret,"class")<-"ccca"
     ret
 
 }
@@ -422,7 +433,6 @@ makePRC<-function(data,norm="qn"){
             data)
     prc<-stats::prcomp(t(normData))$rotation
     ret<-list(normData=normData,eigenVectors=prc)
-    class(ret)<-c("PRC","list")
     ret
 }
 
@@ -437,7 +447,6 @@ makePRC<-function(data,norm="qn"){
 #' normalize(r)
 #' b=NULL
 #' b$eigenVector<-matrix(r,10)
-#' class(b)<-"PRC"
 #' normalize(b)
 #' @export
 normalizePRC<-function(x,...){
@@ -551,7 +560,7 @@ addFasta<-function(ccca,genome,width=200,...){
 #' unify bed file
 ._unifyBedFile<-function(dataset,overlapWidth, chr="chr",
                          summit="summit",name="name"){
-    chrcats<-levels(dataset[chr,])
+    chrcats<-levels(dataset[,chr])
     l<-nrow(dataset)
     t1<-dataset[1:l-1,]
     t2<-dataset[2:l,]
@@ -570,4 +579,76 @@ addFasta<-function(ccca,genome,width=200,...){
     od<-data.frame(chr=data[[chr]],summit=data[[summit]])
     od<-cbind(od,data$matrix)
     od
+}
+
+#' Quantile Normalization
+#'
+#' Applies quantile normalization to data in matrix form.
+#' 
+#' \itemize{
+#' \item{1. Order each of the columns}
+#' \item{2. Sum each orderd row and normalize by the width}
+#' \item{3. Put the data back in order}
+#' }
+#' @param data matrix of data to be normalized
+#' @return matrix of the same dimensions as data
+#' @examples
+#' matr<-cbind(rbind(5,2,3,4),rbind(4,1,4,2),rbind(3,4,6,8))
+#' qn(matr)
+._qn <-function(data){
+    shape<-dim(data)
+    sequence<-apply(data,2,order)
+    reverseSequence<-unlist(apply(sequence,2,order))
+    matr<-matrix(unlist(lapply(seq(shape[2]),
+                               function(i,x,y) x[y[,i],i],data,sequence)),
+                 ncol=shape[2])
+    ranks<-apply(matr,1,sum)/shape[2]
+    apply(reverseSequence,2,function(x) ranks[x])}
+
+#' PCA tp Matrix Transformation
+#'
+#' Use before plotting the principal components
+#' @param x the normalized input data and eigenvectors 
+#' @param n normalizing function applied to the eigevectors
+#' @return the dot product of the normalized data and eigenvectors
+._pca2Matr<-function(x,n=function(x) x){
+    if(is.null(x$normData) | is.null(x$eigenVectors))
+        stop("x needs variables normData and eigenVectors")
+    ## need to add tests for dimensions
+    t(x$normData)%*%apply(x$eigenVectors,2,n)
+}
+
+#' Plot Principal Components
+#'
+#' Basic scatter-plot for visualizing similarities and differences
+#' between cell types based on their principal components. To be used as
+#' a template.
+#' @param ccca class holding the UDM AFS and PRC
+#' @param components two principal components
+#' @export
+plotPrincipalComponents<-function (ccca,components=c(1,2)){
+    matrix<-ChipPComp:::._pca2Matr(ccca$prc)
+    plot(matrix[,components],xlim=c(min(matrix[,components[1]]) -
+                                    abs(min(matrix[,components[1]])) * 0.1,
+                                    max(matrix[,components[1]]) +
+                                    abs(max(matrix[,components[1]]) )* 0.3))
+    text(matrix[,components], labels = ccca$categories, pos = 4)
+}
+
+#' Normalize
+#'
+#' privides unit normalization for numeric x
+#' @param x numeric input
+#' @return numeric of length x
+#' @examples
+#' x<-rnorm(100,10,2)
+#' y<-normalize(x)
+#' print(c(mean(y),sd(y)))
+._normalize<-function(x){
+    norm<-function(x){
+        (x-mean(x))/(sqrt(stats::var(x)))}
+    if(is.null(dim(x)))
+        norm(x)
+    else
+        apply(x,2,norm)
 }

@@ -27,7 +27,8 @@ void unityOutput(int * intChr, int * intSummit, int * name, int * l1,
 		 int * l2, int * peaklength, int* peakwidth,
 		 int* retChr, int * retSummit, int * retMatrix);
 
-static R_NativePrimitiveArgType pileup_t[]={STRSXP,INTSXP,INTSXP,INTSXP,INTSXP,INTSXP};
+
+static R_NativePrimitiveArgType pileup_t[]={STRSXP,STRSXP,INTSXP,INTSXP,INTSXP,INTSXP};
 static R_NativePrimitiveArgType unityOutput_t[]={INTSXP,INTSXP,INTSXP,INTSXP,INTSXP,INTSXP,INTSXP,INTSXP,INTSXP,INTSXP};
 
 

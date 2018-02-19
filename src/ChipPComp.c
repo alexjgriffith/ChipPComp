@@ -7,6 +7,9 @@
 
 #include "ChipPComp.h"
 
+// #define _VERBOSE 1
+// #define _test 1
+
 void unityOutput(int * intChr, int * intSummit, int * name, int * l1,
                  int * l2, int * peaklength, int* peakwidth, int* retChr,
                  int * retSummit, int * retMatrix)
